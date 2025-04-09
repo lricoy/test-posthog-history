@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>PostHog History API Test</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    nav {
+      margin: 20px 0;
+      padding: 10px;
+      background-color: #f5f5f5;
+      border-radius: 5px;
+    }
+    a {
+      margin-right: 15px;
+      color: #2563eb;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    #content {
+      padding: 20px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+    }
+    .debug-panel {
+      margin-top: 30px;
+      padding: 15px;
+      background-color: #f9f9f9;
+      border: 1px solid #eee;
+      border-radius: 5px;
+    }
+    .debug-panel h3 {
+      margin-top: 0;
+    }
+    .event {
+      padding: 8px;
+      margin-bottom: 8px;
+      background-color: #f0f0f0;
+      border-radius: 4px;
+      font-family: monospace;
+      white-space: pre-wrap;
+    }
+    .page-info, .history-panel {
+      margin-top: 20px;
+      padding: 15px;
+      background-color: #f0f8ff;
+      border: 1px solid #add8e6;
+      border-radius: 5px;
+    }
+    .history-panel ol {
+      padding-left: 20px;
+    }
+    .history-panel li {
+      margin-bottom: 5px;
+    }
+  </style>
+</head>
+<body>
+  <h1>PostHog History API Test</h1>
+  <p>This page demonstrates the automatic tracking of History API navigation events in PostHog.</p>
+  
+  <nav>
+    <a href="#" id="page1">Page 1 (pushState)</a>
+    <a href="#" id="page2">Page 2 (pushState)</a>
+    <a href="#" id="page3">Page 3 (replaceState)</a>
+    <button id="back">Browser Back</button>
+    <button id="identify">Identify User</button>
+    <button id="manual-capture">Manual Pageview</button>
+  </nav>
+  
+  <div id="content">
+    <h2>Home Page</h2>
+    <p>Click on the links above to navigate between pages. PostHog will automatically track these navigation events.</p>
+    <p>Check the debug panel below to see captured events.</p>
+  </div>
+
+  <div class="page-info">
+    <h3>Current Page Information</h3>
+    <ul>
+      <li><strong>URL:</strong> <span id="current-url"></span></li>
+      <li><strong>Path:</strong> <span id="current-path"></span></li>
+      <li><strong>User ID:</strong> <span id="current-user">Anonymous</span></li>
+    </ul>
+  </div>
+  
+  <div class="history-panel">
+    <h3>Navigation History</h3>
+    <ol id="navigation-history"></ol>
+  </div>
+
+  <div class="debug-panel">
+    <h3>Debug Panel (Captured Events)</h3>
+    <div id="events-log"></div>
+  </div>
+
+  <script type="module">
+    // Import from our local copy of the built file
+    import { PostHog } from './js/posthog.js';
+
+    // Display initialization message
+    console.log('Initializing PostHog with trackHistoryEvents enabled');
+    
+    // Initialize PostHog with trackHistoryEvents enabled
+    const posthog = new PostHog('phc_rYGjlO1TRm2LhHZlfhWMfkxIATN1pM4tZvwu4iPv6jf', { 
+      api_host: 'https://us.i.posthog.com',
+      person_profiles: 'identified_only',
+      trackHistoryEvents: true,
+      debug: true
+    });
+
+    // Debug event listener to display events
+    posthog.on('*', (eventName, eventData) => {
+      console.log('PostHog Event:', eventName, eventData);
+      
+      // Add to debug panel
+      const eventsLog = document.getElementById('events-log');
+      const eventElement = document.createElement('div');
+      eventElement.className = 'event';
+      eventElement.textContent = `${eventName}: ${JSON.stringify(eventData, null, 2)}`;
+      eventsLog.prepend(eventElement);
+    });
+
+    // Set up click handlers for navigation
+    document.getElementById('page1').addEventListener('click', (e) => {
+      e.preventDefault();
+      console.log('Navigating to Page 1 using pushState');
+      history.pushState({page: 1}, 'Page 1', '/page1');
+      updateContent('Page 1', 'This is Page 1 content using pushState.');
+      updatePageInfo();
+      addToNavigationHistory('pushState', '/page1');
+    });
+
+    document.getElementById('page2').addEventListener('click', (e) => {
+      e.preventDefault();
+      console.log('Navigating to Page 2 using pushState');
+      history.pushState({page: 2}, 'Page 2', '/page2');
+      updateContent('Page 2', 'This is Page 2 content using pushState.');
+      updatePageInfo();
+      addToNavigationHistory('pushState', '/page2');
+    });
+
+    document.getElementById('page3').addEventListener('click', (e) => {
+      e.preventDefault();
+      console.log('Navigating to Page 3 using replaceState');
+      history.replaceState({page: 3}, 'Page 3', '/page3');
+      updateContent('Page 3', 'This is Page 3 content using replaceState (this replaces the current history entry instead of creating a new one).');
+      updatePageInfo();
+      addToNavigationHistory('replaceState', '/page3');
+    });
+
+    document.getElementById('back').addEventListener('click', () => {
+      console.log('Going back in browser history');
+      history.back();
+    });
+
+    // Add identify functionality
+    document.getElementById('identify').addEventListener('click', () => {
+      const userId = `user_${Math.floor(Math.random() * 10000)}`;
+      console.log(`Identifying as user: ${userId}`);
+      posthog.identify(userId, {
+        name: 'Test User',
+        email: `${userId}@example.com`
+      });
+      document.getElementById('current-user').textContent = userId;
+      alert(`Identified as: ${userId}`);
+    });
+
+    // Add manual pageview capture
+    document.getElementById('manual-capture').addEventListener('click', () => {
+      console.log('Manually capturing pageview event');
+      posthog.capture('$pageview', {
+        manual_capture: true,
+        current_path: window.location.pathname
+      });
+    });
+
+    // Function to update the page content
+    function updateContent(title, text) {
+      document.getElementById('content').innerHTML = `
+        <h2>${title}</h2>
+        <p>${text}</p>
+      `;
+    }
+
+    // Handle popstate events (browser back/forward buttons)
+    window.addEventListener('popstate', (event) => {
+      console.log('popstate event fired', event.state);
+      const page = event.state?.page || 'Home';
+      if (page === 'Home') {
+        updateContent('Home Page', 'This is the home page. You navigated here using browser history (popstate event).');
+      } else {
+        updateContent(`Page ${page}`, `This is Page ${page} content. You navigated here using browser history (popstate event).`);
+      }
+      updatePageInfo();
+      addToNavigationHistory('popstate', window.location.pathname);
+    });
+
+    console.log('Setup complete. Try clicking the navigation links above.');
+
+    function updatePageInfo() {
+      document.getElementById('current-url').textContent = window.location.href;
+      document.getElementById('current-path').textContent = window.location.pathname;
+    }
+
+    function addToNavigationHistory(type, path) {
+      const historyList = document.getElementById('navigation-history');
+      const item = document.createElement('li');
+      item.textContent = `${type}: ${path}`;
+      historyList.appendChild(item);
+      
+      // Keep only the last 10 entries
+      while (historyList.children.length > 10) {
+        historyList.removeChild(historyList.firstChild);
+      }
+    }
+
+    // Update page info initially
+    updatePageInfo();
+  </script>
+</body>
+</html> 
