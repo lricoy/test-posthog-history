@@ -1,0 +1,32 @@
+{
+  "name": "test-posthog-history",
+  "version": "1.0.0",
+  "description": "Demo for PostHog History API tracking feature",
+  "main": "index.js",
+  "scripts": {
+    "start": "npx http-server -o",
+    "predeploy": "echo 'No build step needed - static files ready to deploy'",
+    "deploy": "gh-pages -d ."
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lricoy/test-posthog-history.git"
+  },
+  "keywords": [
+    "posthog",
+    "history-api",
+    "analytics",
+    "spa",
+    "tracking"
+  ],
+  "author": "Luciano Ricoy",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/lricoy/test-posthog-history/issues"
+  },
+  "homepage": "https://lricoy.github.io/test-posthog-history",
+  "devDependencies": {
+    "gh-pages": "^6.1.1",
+    "http-server": "^14.1.1"
+  }
+}
