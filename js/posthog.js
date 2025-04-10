@@ -198,6 +198,10 @@ const isError = (x) => {
 function getFetch() {
     return typeof fetch !== 'undefined' ? fetch : typeof global.fetch !== 'undefined' ? global.fetch : undefined;
 }
+// copied from: https://github.com/PostHog/posthog-js/blob/main/react/src/utils/type-utils.ts#L4
+const isFunction = function (f) {
+    return typeof f === 'function';
+};
 
 // Copyright (c) 2013 Pieroxy <pieroxy@pieroxy.net>
 // This work is free. You can redistribute it and/or modify it
@@ -2629,6 +2633,41 @@ const getStorage = (type, window) => {
   }
 };
 
+// import { patch } from 'rrweb/typings/utils'
+function patch(source, name, replacement) {
+    try {
+        if (!(name in source)) {
+            return () => {
+                //
+            };
+        }
+        const original = source[name];
+        const wrapped = replacement(original);
+        // Make sure it's a function first, as we need to attach an empty prototype for `defineProperties` to work
+        // otherwise it'll throw "TypeError: Object.defineProperties called on non-object"
+        if (isFunction(wrapped)) {
+            wrapped.prototype = wrapped.prototype || {};
+            Object.defineProperties(wrapped, {
+                __posthog_wrapped__: {
+                    enumerable: false,
+                    value: true,
+                },
+            });
+        }
+        source[name] = wrapped;
+        return () => {
+            source[name] = original;
+        };
+    }
+    catch {
+        return () => {
+            //
+        };
+        // This can throw if multiple fill happens on a global object like XMLHttpRequest
+        // Fixes https://github.com/getsentry/sentry-javascript/issues/2043
+    }
+}
+
 class PostHog extends PostHogCore {
   constructor(apiKey, options) {
     super(apiKey, options);
@@ -2639,7 +2678,7 @@ class PostHog extends PostHogCore {
     if (options?.preloadFeatureFlags !== false) {
       this.reloadFeatureFlags();
     }
-    if (options?.trackHistoryEvents && typeof window !== 'undefined') {
+    if (options?.captureHistoryEvents && typeof window !== 'undefined') {
       this.setupHistoryEventTracking();
     }
   }
@@ -2686,21 +2725,28 @@ class PostHog extends PostHogCore {
       ...getContext(this.getWindow())
     };
   }
+  // Setup tracking for the three SPA navigation types: pushState, replaceState, and popstate
   setupHistoryEventTracking() {
     const window = this.getWindow();
     if (!window) {
       return;
     }
-    const originalPushState = window.history.pushState;
-    const originalReplaceState = window.history.replaceState;
-    window.history.pushState = (state, title, url) => {
-      originalPushState.apply(window.history, [state, title, url]);
-      this.captureNavigationEvent('pushState');
-    };
-    window.history.replaceState = (state, title, url) => {
-      originalReplaceState.apply(window.history, [state, title, url]);
-      this.captureNavigationEvent('replaceState');
-    };
+    // Old fashioned, we could also use arrow functions but I think relying on the closure for a patch is more reliable
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const self = this;
+    // Use patch with proper History method types
+    patch(window.history, 'pushState', originalPushState => {
+      return function patchedPushState(history, state, title, url) {
+        originalPushState.call(history, state, title, url);
+        self.captureNavigationEvent('pushState');
+      };
+    });
+    patch(window.history, 'replaceState', originalReplaceState => {
+      return function patchedReplaceState(history, state, title, url) {
+        originalReplaceState.call(history, state, title, url);
+        self.captureNavigationEvent('replaceState');
+      };
+    });
     // For popstate we need to listen to the event instead of overriding a method
     window.addEventListener('popstate', () => {
       this.captureNavigationEvent('popstate');
